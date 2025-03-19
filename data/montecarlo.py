@@ -7,22 +7,39 @@ import datetime as dt
 import yfinance as yf
 from scipy.stats import norm
 
+from api.db import get_connection
+
+def getHistoricalData(years):
+    mydb = get_connection()
+
+    if mydb:
+        mycursor = mydb.cursor()
+
+        mycursor.execute("SELECT ticker FROM portfolio")
+
+        tickers = [ticker[0] for ticker in mycursor.fetchall()]
+
+        print(type(tickers))
+        endDate = dt.datetime.now()
+        startDate = endDate - dt.timedelta(days=365 * years)
+
+        adj_close_df = pd.DataFrame()
+
+        # Download historical data excluding the current day
+        for ticker in tickers:
+            data = yf.download(ticker, start=startDate, end=endDate)
+            adj_close_df[ticker] = data['Close']
+        
+        adj_close_df.to_csv('historical_data.csv')
+
+    else:
+        print("Database connection failed. montecarlo.py")
+
 def montecarlo():
-    years = 3
-    endDate = dt.datetime.now()
-    startDate = endDate - dt.timedelta(days=365 * years)
+    adj_close_df = pd.read_csv('historical_data.csv', index_col=0, parse_dates=True)
+    tickers = list(adj_close_df.columns)[1:]
 
-    tickers = [
-    'AAPL', 'AMGN', 'AXP', 'BA', 'CAT', 'CRM', 'CSCO', 'CVX', 
-    'DIS', 'DOW', 'GS', 'HD', 'HON', 'IBM', 'INTC', 'JNJ', 
-    'JPM', 'KO', 'MCD', 'MMM', 'MRK', 'MSFT', 'NKE', 'PG', 
-    'TRV', 'UNH', 'V', 'VZ', 'WBA', 'WMT']
-    adj_close_df = pd.DataFrame()
-
-    # Download historical data excluding the current day
-    for ticker in tickers:
-        data = yf.download(ticker, start=startDate, end=endDate - dt.timedelta(days=1))
-        adj_close_df[ticker] = data['Close']
+    print(tickers)
 
     # Get current prices
     current_prices = {}
@@ -32,10 +49,10 @@ def montecarlo():
         current_prices[ticker] = current_price
 
     # Append the current prices as a new row
-    current_prices_df = pd.DataFrame([current_prices], index=[endDate])
+    current_prices_df = pd.DataFrame([current_prices], index=[dt.datetime.now()])
     adj_close_df = pd.concat([adj_close_df, current_prices_df])
 
-    # print(adj_close_df.tail(1))
+    print(adj_close_df.tail(1))
 
     ### Calculate the daily log returns and drop any NAs
     log_returns = np.log(adj_close_df/adj_close_df.shift(1))
@@ -91,5 +108,3 @@ def montecarlo():
     confidence_interval = .95
     VaR = -np.percentile(scenarioReturn, 100 * (1 - confidence_interval))
     print(VaR)
-
-montecarlo()
