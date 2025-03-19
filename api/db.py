@@ -1,4 +1,5 @@
 import mysql.connector
+from mysql.connector import Error
 
 DB_CONFIG ={
   "host": "mysql-344edd44-first-project1234.i.aivencloud.com",
@@ -6,7 +7,7 @@ DB_CONFIG ={
   "password": "AVNS_tWRNiEjGh9XP6kCgrdE",
   "database": "real_time_db",
   "port": "26056",
-  "ssl_ca": "data\portfoliomanager.pem"
+  "ssl_ca": "portfoliomanager.pem"
 }
 
 def get_connection():

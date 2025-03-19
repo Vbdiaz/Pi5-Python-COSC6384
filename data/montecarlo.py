@@ -1,110 +1,206 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 import numpy as np
 import pandas as pd
 import datetime as dt
 import yfinance as yf
-from scipy.stats import norm
-
 from api.db import get_connection
 
-def getHistoricalData(years):
-    mydb = get_connection()
+def get_portfolio_data(years: int):
+    """
+    Fetches portfolio data from MySQL, saves it to CSV, and downloads historical stock prices.
 
-    if mydb:
-        mycursor = mydb.cursor()
+    Args:
+        years (int): Number of years of historical data to fetch.
+    """
+    try:
+        # Establish database connection
+        mydb = get_connection()
+        with mydb.cursor() as mycursor:
+            # Execute query
+            query = "SELECT ticker, shares FROM portfolio ORDER BY ticker ASC"
+            mycursor.execute(query)
 
-        mycursor.execute("SELECT ticker FROM portfolio")
+            # Fetch results
+            rows = mycursor.fetchall()
 
-        tickers = [ticker[0] for ticker in mycursor.fetchall()]
+            # Convert to DataFrame
+            ticker_shares_df = pd.DataFrame(rows, columns=["ticker", "shares"])
 
-        print(type(tickers))
-        endDate = dt.datetime.now()
-        startDate = endDate - dt.timedelta(days=365 * years)
+            # Save portfolio data to CSV
+            ticker_shares_df.to_csv("ticker_shares.csv", index=False)
+
+        # Extract tickers
+        tickers = ticker_shares_df["ticker"].tolist()
+
+        # Define date range
+        end_date = dt.datetime.now()
+        start_date = end_date - dt.timedelta(days=365 * years)
 
         adj_close_df = pd.DataFrame()
 
-        # Download historical data excluding the current day
+        # Download historical data for each ticker
         for ticker in tickers:
-            data = yf.download(ticker, start=startDate, end=endDate)
-            adj_close_df[ticker] = data['Close']
-        
-        adj_close_df.to_csv('historical_data.csv')
+            stock_data = yf.download(ticker, start=start_date, end=end_date)
+            if not stock_data.empty:
+                adj_close_df[ticker] = stock_data["Close"]
 
-    else:
-        print("Database connection failed. montecarlo.py")
+        # Save historical data to CSV
+        adj_close_df.to_csv("historical_data.csv", index=True)
 
-def montecarlo():
-    adj_close_df = pd.read_csv('historical_data.csv', index_col=0, parse_dates=True)
-    tickers = list(adj_close_df.columns)[1:]
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+    finally:
+        if mydb.is_connected():
+            mydb.close()
 
-    print(tickers)
-
-    # Get current prices
+def get_current_prices(tickers):
+    """Fetch the latest closing prices for the given tickers."""
     current_prices = {}
     for ticker in tickers:
-        ticker_data = yf.Ticker(ticker)
-        current_price = ticker_data.history(period='1d').tail(1)['Close'].values[0]
-        current_prices[ticker] = current_price
+        try:
+            ticker_data = yf.Ticker(ticker)
+            current_price = ticker_data.history(period='1d').tail(1)['Close'].values[0]
+            current_prices[ticker] = current_price
+        except Exception as e:
+            print(f"Error retrieving price for {ticker}: {e}")
+            current_prices[ticker] = np.nan  # Handle missing data
 
-    # Append the current prices as a new row
+    return current_prices
+
+
+def expected_return(weights, log_returns):
+    """Calculate the expected portfolio return."""
+    return np.sum(log_returns.mean() * weights)
+
+
+def standard_deviation(weights, cov_matrix):
+    """Calculate the portfolio standard deviation."""
+    variance = weights.T @ cov_matrix @ weights
+    return np.sqrt(variance)
+
+
+def random_z_score():
+    """Generate a random Z-score from a standard normal distribution."""
+    return np.random.normal(0, 1)
+
+
+def scenario_gain_loss(market_value, portfolio_expected_return, portfolio_std_dev, z_score, days):
+    """Calculate portfolio gain/loss over a given period."""
+    return (
+        market_value * portfolio_expected_return * days +
+        market_value * portfolio_std_dev * z_score * np.sqrt(days)
+    )
+
+
+def monte_carlo():
+    """Run a Monte Carlo simulation for portfolio risk analysis."""
+    
+    # Load historical price data
+    adj_close_df = pd.read_csv('historical_data.csv', index_col=0)
+    tickers = list(adj_close_df.columns)
+
+    print(f"Tickers: {tickers}")
+
+    # Get current prices and append as last row
+    current_prices = get_current_prices(tickers)
     current_prices_df = pd.DataFrame([current_prices], index=[dt.datetime.now()])
     adj_close_df = pd.concat([adj_close_df, current_prices_df])
 
-    print(adj_close_df.tail(1))
+    # Compute daily log returns
+    log_returns = np.log(adj_close_df / adj_close_df.shift(1)).dropna()
 
-    ### Calculate the daily log returns and drop any NAs
-    log_returns = np.log(adj_close_df/adj_close_df.shift(1))
-    log_returns = log_returns.dropna()
+    # Load share holdings
+    ticker_shares_df = pd.read_csv('ticker_shares.csv')
 
-    # print(log_returns)
+    # Ensure tickers are in order
+    if ticker_shares_df['ticker'].tolist() != tickers:
+        print("Error: Tickers in 'ticker_shares.csv' are out of order.")
+        return
 
-    ### Create a function that will be used to calculate portfolio expected return
-    ### We are assuming that future returns are based on past returns, which is not a reliable assumption.
-    def expected_return(weights, log_returns):
-        return np.sum(log_returns.mean()*weights)
+    # Compute portfolio value and weights
+    shares_held = ticker_shares_df.iloc[:, 1].values  # Get shares column
+    prices_now = adj_close_df.iloc[-1, :].values  # Get latest prices
+    market_value = np.sum(shares_held * prices_now)
 
-    ### Create a function that will be used to calculate portfolio standard deviation
-    def standard_deviation (weights, cov_matrix):
-        variance = weights.T @ cov_matrix @ weights
-        return np.sqrt(variance)
+    if market_value == 0:
+        print("Error: Portfolio value is zero, check holdings or price data.")
+        return
 
+    weights = (shares_held * prices_now) / market_value
 
-    ### Create a covariance matrix for all the securities
+    print(f"Weights: {weights}")
+    print(f"Market Value: {market_value}")
+
+    # Compute portfolio metrics
     cov_matrix = log_returns.cov()
-    # print(cov_matrix)
-
-
-    ### Create an equally weighted portfolio and find total portfolio expected return and standard deviation
-    portfolio_value = 1000000
-    weights = np.array([
-    0.085, 0.054, 0.029, 0.032, 0.034, 0.054, 0.037, 0.041, 
-    0.032, 0.016, 0.062, 0.053, 0.037, 0.040, 0.009, 0.047, 
-    0.053, 0.020, 0.046, 0.035, 0.039, 0.068, 0.030, 0.054, 
-    0.031, 0.085, 0.044, 0.016, 0.013, 0.048])
     portfolio_expected_return = expected_return(weights, log_returns)
     portfolio_std_dev = standard_deviation(weights, cov_matrix)
 
-
-    def random_z_score():
-        return np.random.normal(0,1)
-
-    ### Create a function to calculate scenarioGainLoss
-    days = 20
-
-    def scenario_gain_loss(portfolio_value, portfolio_std_dev, z_score, days):
-        return portfolio_value * portfolio_expected_return * days + portfolio_value * portfolio_std_dev * z_score * np.sqrt(days)
-
-    ### Run 10000 simulations
+    # Monte Carlo simulation
     simulations = 20000
-    scenarioReturn = []
+    days = 20
+    scenario_returns = [
+        scenario_gain_loss(market_value, portfolio_expected_return, portfolio_std_dev, random_z_score(), days)
+        for _ in range(simulations)
+    ]
 
-    for i in range (simulations):
-        z_score = random_z_score()
-        scenarioReturn.append(scenario_gain_loss(portfolio_value, portfolio_std_dev, z_score, days))
+    # Compute Value at Risk (VaR) at 95% confidence interval
+    confidence_interval = 0.95
+    VaR = -np.percentile(scenario_returns, 100 * (1 - confidence_interval))
 
-    ### Specify a confidence interval and calculate the Value at Risk (VaR)
-    confidence_interval = .95
-    VaR = -np.percentile(scenarioReturn, 100 * (1 - confidence_interval))
-    print(VaR)
+    print(f"Value at Risk (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
+
+    push_value_at_risk_data(VaR, "monte_carlo", tickers, shares_held, prices_now, market_value)
+    return VaR
+
+def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list, prices: list, portfolio_value: float):
+    """
+    Push portfolio VaR data and corresponding stock data into the database.
+
+    Args:
+        VaR (float): Calculated portfolio Value at Risk.
+        method (str): The method used for calculating VaR (e.g., "monte_carlo").
+        tickers (list): List of stock tickers.
+        shares (list): List of shares held for each ticker.
+        prices (list): List of current stock prices for each ticker.
+        portfolio_value (float): The total portfolio market value.
+    """
+    try:
+        # Establish database connection
+        mydb = get_connection()
+        with mydb.cursor() as mycursor:
+            # Get the current timestamp; this will be our unique identifier
+            current_time = dt.datetime.now()
+
+            # Convert VaR to a native Python float in case it's a NumPy type.
+            VaR_native = float(VaR)
+            portfolio_value_native = float(portfolio_value)
+
+            # Insert the portfolio-wide VaR record
+            sql_value_at_risk = """
+                INSERT INTO value_at_risk (calculation_time, var_value, method, portfolio_value)
+                VALUES (%s, %s, %s, %s)
+            """
+            mycursor.execute(sql_value_at_risk, (current_time, VaR_native, method, portfolio_value_native))
+
+            # Prepare the SQL for inserting stock data
+            sql_stock_data = """
+                INSERT INTO stock_data_log (calculation_time, ticker, current_price, shares)
+                VALUES (%s, %s, %s, %s)
+            """
+            # Build a list of tuples for each stock record
+            stock_records = [
+                (current_time, tickers[i], float(prices[i]), int(shares[i]))
+                for i in range(len(tickers))
+            ]
+            mycursor.executemany(sql_stock_data, stock_records)
+
+            # Commit the transaction
+            mydb.commit()
+
+            print(f"Successfully inserted VaR record and {len(tickers)} stock records with timestamp {current_time}.")
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+    finally:
+        if mydb.is_connected():
+            mydb.close()
