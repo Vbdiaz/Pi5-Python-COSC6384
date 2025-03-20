@@ -90,7 +90,6 @@ def scenario_gain_loss(market_value, portfolio_expected_return, portfolio_std_de
         market_value * portfolio_std_dev * z_score * np.sqrt(days)
     )
 
-
 def monte_carlo():
     """Run a Monte Carlo simulation for portfolio risk analysis."""
     
@@ -204,3 +203,5 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list
     finally:
         if mydb.is_connected():
             mydb.close()
+
+## Second VAR calculation Method
