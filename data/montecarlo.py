@@ -205,3 +205,47 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list
             mydb.close()
 
 ## Second VAR calculation Method
+
+def historical_var():
+    """Calculate Value at Risk using Historical Simulation method"""
+    
+    # Load data
+    adj_close_df = pd.read_csv('historical_data.csv', index_col=0)
+    tickers = list(adj_close_df.columns)
+    
+    # Get current prices and update DataFrame
+    current_prices = get_current_prices(tickers)
+    current_prices_df = pd.DataFrame([current_prices], index=[dt.datetime.now()])
+    adj_close_df = pd.concat([adj_close_df, current_prices_df])
+
+    # Calculate daily returns
+    returns = adj_close_df.pct_change().dropna()
+
+    # Load portfolio weights
+    ticker_shares_df = pd.read_csv('ticker_shares.csv')
+    shares = ticker_shares_df['shares'].values
+    prices = adj_close_df.iloc[-1].values
+    portfolio_value = np.sum(shares * prices)
+    weights = (shares * prices) / portfolio_value
+
+    # Calculate historical portfolio returns
+    portfolio_returns = returns.dot(weights)
+
+    # Generate hypothetical P&L scenarios
+    scenarios = portfolio_value * portfolio_returns
+
+    # Calculate VaR
+    confidence = 0.95
+    VaR = -np.percentile(scenarios, 100*(1-confidence))
+
+    print(f"Historical VaR (95% CI): ${VaR:,.2f}")
+    
+    push_value_at_risk_data(
+        VaR, 
+        "historical", 
+        tickers,
+        shares,
+        prices,
+        portfolio_value
+    )
+    return VaR

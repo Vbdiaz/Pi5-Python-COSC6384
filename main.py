@@ -4,7 +4,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from data.montecarlo import get_portfolio_data, monte_carlo
+from data.montecarlo import get_portfolio_data, monte_carlo, historical_var
 
 MARKET_OPEN = datetime.strptime("08:30", "%H:%M").time()
 MARKET_CLOSE = datetime.strptime("15:00", "%H:%M").time()
@@ -26,6 +26,7 @@ def periodic_var_calculation():
         if is_market_open():
             print("MARKET OPEN: Calculating VaR, sleeping for 10 seconds...")
             monte_carlo()
+            historical_var()  
             time.sleep(10)
         else:
             # Save last three years of data after market closes
@@ -42,4 +43,4 @@ if __name__ == "__main__":
     var_process = multiprocessing.Process(target=periodic_var_calculation)
     var_process.start()
     #periodic_var_calculation()
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5001)
