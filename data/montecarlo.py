@@ -148,17 +148,36 @@ def monte_carlo():
     confidence_interval = 0.95
     VaR = -np.percentile(scenario_returns, 100 * (1 - confidence_interval))
 
+    # Expected Shortfall (ES): mean of losses worse than the VaR
+    losses = [x for x in scenario_returns if x < -VaR]
+    ES = -np.mean(losses) if losses else 0
     end_time = dt.datetime.now()
 
+    print(f"Expected Shortfall (ES) at {confidence_interval * 100}% confidence: ${ES:,.2f}")
     print(f"Value at Risk (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
     threshold = 0.0677
     percent_at_risk = VaR / market_value
     warning = True if percent_at_risk >= threshold else False
-    push_value_at_risk_data(VaR, "monte_carlo", tickers, prices_now, market_value, warning, percent_at_risk, threshold, start_time, end_time)
+    push_value_at_risk_data(
+        VaR, ES, "monte_carlo", tickers, prices_now, market_value, 
+        warning, percent_at_risk, threshold, start_time, end_time
+        )
     return VaR
 
-def push_value_at_risk_data(VaR: float, method: str, tickers: list, prices: list, portfolio_value: float, warning, percent_at_risk: float, threshold: float, start_time: dt.datetime, end_time: dt.datetime):
+def push_value_at_risk_data(
+        VaR: float, 
+        ES: float,
+        method: str, 
+        tickers: list, 
+        prices: list, 
+        portfolio_value: float, 
+        warning, 
+        percent_at_risk: float, 
+        threshold: float, 
+        start_time: dt.datetime, 
+        end_time: dt.datetime
+        ):
     """
     Push portfolio VaR data and corresponding stock data into the database.
 
@@ -184,26 +203,27 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, prices: list
             percent_at_risk_native = float(percent_at_risk)
             threshold_native = float(threshold)
             
-            percent_at_risk_native = float(percent_at_risk)
-            threshold_native = float(threshold)
-            
             # Insert the portfolio-wide VaR record
             sql_value_at_risk = """
-                INSERT INTO value_at_risk (calculation_time, end_time, duration_seconds, var_value, method, portfolio_value, warning, percent_at_risk, percent_threshold)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO value_at_risk (
+                    calculation_time, end_time, duration_seconds, 
+                    var_value, es_value, method, portfolio_value, 
+                    warning, percent_at_risk, percent_threshold)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
-            mycursor.execute(sql_value_at_risk, (current_time, end_time, duration_seconds, VaR_native, method, portfolio_value_native, warning, percent_at_risk_native, threshold_native))
+            mycursor.execute(sql_value_at_risk, (
+                current_time, end_time, duration_seconds, 
+                VaR_native, float(ES), method, portfolio_value_native, 
+                warning, percent_at_risk_native, threshold_native
+                ))
 
             # Prepare the SQL for inserting stock data
             sql_stock_data = """
                 INSERT INTO stock_data_log (calculation_time, ticker, current_price)
                 VALUES (%s, %s, %s)
-                INSERT INTO stock_data_log (calculation_time, ticker, current_price)
-                VALUES (%s, %s, %s)
             """
             # Build a list of tuples for each stock record
             stock_records = [
-                (current_time, tickers[i], float(prices[i]))
                 (current_time, tickers[i], float(prices[i]))
                 for i in range(len(tickers))
             ]
@@ -256,13 +276,13 @@ def historical_var():
     confidence = 0.95
     VaR = -np.percentile(scenarios, 100*(1-confidence))
 
+    # Expected Shortfall (ES)
+    losses = scenarios[scenarios < -VaR]
+    ES = -np.mean(losses) if not losses.empty else 0
     end_time = dt.datetime.now()
 
+    print(f"Historical Expected Shortfall (ES) at {confidence * 100}% confidence: ${ES:,.2f}")
     print(f"Historical VaR (95% CI): ${VaR:,.2f}")
-
-    threshold = 0.0149
-    percent_at_risk = VaR/portfolio_value
-    warning = True if percent_at_risk >= threshold else False
 
     threshold = 0.0149
     percent_at_risk = VaR/portfolio_value
@@ -270,6 +290,7 @@ def historical_var():
     
     push_value_at_risk_data(
         VaR, 
+        ES,
         "historical", 
         tickers,
         prices,
