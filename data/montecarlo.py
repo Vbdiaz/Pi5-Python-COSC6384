@@ -92,6 +92,8 @@ def scenario_gain_loss(market_value, portfolio_expected_return, portfolio_std_de
 
 def monte_carlo():
     """Run a Monte Carlo simulation for portfolio risk analysis."""
+
+    start_time = dt.datetime.now()
     
     # Load historical price data
     adj_close_df = pd.read_csv('historical_data.csv', index_col=0)
@@ -146,12 +148,14 @@ def monte_carlo():
     confidence_interval = 0.95
     VaR = -np.percentile(scenario_returns, 100 * (1 - confidence_interval))
 
+    end_time = dt.datetime.now()
+
     print(f"Value at Risk (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
-    push_value_at_risk_data(VaR, "monte_carlo", tickers, shares_held, prices_now, market_value)
+    push_value_at_risk_data(VaR, "monte_carlo", tickers, shares_held, prices_now, market_value, start_time, end_time)
     return VaR
 
-def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list, prices: list, portfolio_value: float):
+def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list, prices: list, portfolio_value: float, start_time: dt.datetime, end_time: dt.datetime):
     """
     Push portfolio VaR data and corresponding stock data into the database.
 
@@ -169,6 +173,8 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list
         with mydb.cursor() as mycursor:
             # Get the current timestamp; this will be our unique identifier
             current_time = dt.datetime.now()
+            duration_seconds = round((end_time - start_time).total_seconds(), 2)
+
 
             # Convert VaR to a native Python float in case it's a NumPy type.
             VaR_native = float(VaR)
@@ -176,10 +182,10 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list
 
             # Insert the portfolio-wide VaR record
             sql_value_at_risk = """
-                INSERT INTO value_at_risk (calculation_time, var_value, method, portfolio_value)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO value_at_risk (calculation_time, end_time, duration_seconds, var_value, method, portfolio_value, warning)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            mycursor.execute(sql_value_at_risk, (current_time, VaR_native, method, portfolio_value_native))
+            mycursor.execute(sql_value_at_risk, (current_time, end_time, duration_seconds, VaR_native, method, portfolio_value_native))
 
             # Prepare the SQL for inserting stock data
             sql_stock_data = """
@@ -188,7 +194,7 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list
             """
             # Build a list of tuples for each stock record
             stock_records = [
-                (current_time, tickers[i], float(prices[i]), int(shares[i]))
+                (end_time, tickers[i], float(prices[i]), int(shares[i]))
                 for i in range(len(tickers))
             ]
             mycursor.executemany(sql_stock_data, stock_records)
@@ -208,6 +214,8 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list
 
 def historical_var():
     """Calculate Value at Risk using Historical Simulation method"""
+
+    start_time = dt.datetime.now()
     
     # Load data
     adj_close_df = pd.read_csv('historical_data.csv', index_col=0)
@@ -238,6 +246,8 @@ def historical_var():
     confidence = 0.95
     VaR = -np.percentile(scenarios, 100*(1-confidence))
 
+    end_time = dt.datetime.now()
+
     print(f"Historical VaR (95% CI): ${VaR:,.2f}")
     
     push_value_at_risk_data(
@@ -246,6 +256,8 @@ def historical_var():
         tickers,
         shares,
         prices,
-        portfolio_value
+        portfolio_value,
+        start_time, 
+        end_time
     )
     return VaR

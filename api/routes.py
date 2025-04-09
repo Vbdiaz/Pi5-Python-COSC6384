@@ -10,35 +10,10 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-@app.route('/var/latest', methods=['GET'])
-def get_latest_var():
-    """Get the latest VaR calculation from database"""
-    try:
-        conn = get_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("""
-            SELECT * FROM value_at_risk 
-            ORDER BY calculation_time DESC 
-            LIMIT 1
-        """)
-        result = cursor.fetchone()
-        
-        cursor.close()
-        conn.close()
-        
-        if result:
-            result['calculation_time'] = result['calculation_time'].isoformat()
-            return jsonify(result)
-        return jsonify({"message": "No VaR records found"}), 404
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/health', methods=['GET'])
 def health_check():
     """Service health check"""
-    return jsonify({"status": "healthy", "timestamp": datetime.utcnow().isoformat()})
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
 ## Receive trades
 
