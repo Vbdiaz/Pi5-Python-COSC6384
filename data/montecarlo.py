@@ -184,6 +184,9 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, prices: list
             percent_at_risk_native = float(percent_at_risk)
             threshold_native = float(threshold)
             
+            percent_at_risk_native = float(percent_at_risk)
+            threshold_native = float(threshold)
+            
             # Insert the portfolio-wide VaR record
             sql_value_at_risk = """
                 INSERT INTO value_at_risk (calculation_time, end_time, duration_seconds, var_value, method, portfolio_value, warning, percent_at_risk, percent_threshold)
@@ -195,9 +198,12 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, prices: list
             sql_stock_data = """
                 INSERT INTO stock_data_log (calculation_time, ticker, current_price)
                 VALUES (%s, %s, %s)
+                INSERT INTO stock_data_log (calculation_time, ticker, current_price)
+                VALUES (%s, %s, %s)
             """
             # Build a list of tuples for each stock record
             stock_records = [
+                (current_time, tickers[i], float(prices[i]))
                 (current_time, tickers[i], float(prices[i]))
                 for i in range(len(tickers))
             ]
@@ -253,6 +259,10 @@ def historical_var():
     end_time = dt.datetime.now()
 
     print(f"Historical VaR (95% CI): ${VaR:,.2f}")
+
+    threshold = 0.0149
+    percent_at_risk = VaR/portfolio_value
+    warning = True if percent_at_risk >= threshold else False
 
     threshold = 0.0149
     percent_at_risk = VaR/portfolio_value
