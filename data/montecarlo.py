@@ -152,10 +152,13 @@ def monte_carlo():
 
     print(f"Value at Risk (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
-    push_value_at_risk_data(VaR, "monte_carlo", tickers, shares_held, prices_now, market_value, start_time, end_time)
+    threshold = 0.0677
+    percent_at_risk = VaR / market_value
+    warning = True if percent_at_risk >= threshold else False
+    push_value_at_risk_data(VaR, "monte_carlo", tickers, prices_now, market_value, warning, percent_at_risk, threshold, start_time, end_time)
     return VaR
 
-def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list, prices: list, portfolio_value: float, start_time: dt.datetime, end_time: dt.datetime):
+def push_value_at_risk_data(VaR: float, method: str, tickers: list, prices: list, portfolio_value: float, warning, percent_at_risk: float, threshold: float, start_time: dt.datetime, end_time: dt.datetime):
     """
     Push portfolio VaR data and corresponding stock data into the database.
 
@@ -163,7 +166,6 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list
         VaR (float): Calculated portfolio Value at Risk.
         method (str): The method used for calculating VaR (e.g., "monte_carlo").
         tickers (list): List of stock tickers.
-        shares (list): List of shares held for each ticker.
         prices (list): List of current stock prices for each ticker.
         portfolio_value (float): The total portfolio market value.
     """
@@ -179,22 +181,24 @@ def push_value_at_risk_data(VaR: float, method: str, tickers: list, shares: list
             # Convert VaR to a native Python float in case it's a NumPy type.
             VaR_native = float(VaR)
             portfolio_value_native = float(portfolio_value)
-
+            percent_at_risk_native = float(percent_at_risk)
+            threshold_native = float(threshold)
+            
             # Insert the portfolio-wide VaR record
             sql_value_at_risk = """
-                INSERT INTO value_at_risk (calculation_time, end_time, duration_seconds, var_value, method, portfolio_value, warning)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO value_at_risk (calculation_time, end_time, duration_seconds, var_value, method, portfolio_value, warning, percent_at_risk, percent_threshold)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
-            mycursor.execute(sql_value_at_risk, (current_time, end_time, duration_seconds, VaR_native, method, portfolio_value_native))
+            mycursor.execute(sql_value_at_risk, (current_time, end_time, duration_seconds, VaR_native, method, portfolio_value_native, warning, percent_at_risk_native, threshold_native))
 
             # Prepare the SQL for inserting stock data
             sql_stock_data = """
-                INSERT INTO stock_data_log (calculation_time, ticker, current_price, shares)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO stock_data_log (calculation_time, ticker, current_price)
+                VALUES (%s, %s, %s)
             """
             # Build a list of tuples for each stock record
             stock_records = [
-                (end_time, tickers[i], float(prices[i]), int(shares[i]))
+                (current_time, tickers[i], float(prices[i]))
                 for i in range(len(tickers))
             ]
             mycursor.executemany(sql_stock_data, stock_records)
@@ -249,14 +253,20 @@ def historical_var():
     end_time = dt.datetime.now()
 
     print(f"Historical VaR (95% CI): ${VaR:,.2f}")
+
+    threshold = 0.0149
+    percent_at_risk = VaR/portfolio_value
+    warning = True if percent_at_risk >= threshold else False
     
     push_value_at_risk_data(
         VaR, 
         "historical", 
         tickers,
-        shares,
         prices,
-        portfolio_value,
+        portfolio_value, 
+        warning, 
+        percent_at_risk, 
+        threshold,
         start_time, 
         end_time
     )

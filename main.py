@@ -25,8 +25,12 @@ def periodic_var_calculation():
         print("Starting periodic VaR calculation...")
         if is_market_open():
             print("MARKET OPEN: Calculating VaR, sleeping for 10 seconds...")
+            start_time = time.time()
             monte_carlo()
-            historical_var()  
+            print("MonteCarlo: --- %s seconds ---" % (time.time() - start_time))
+            start_time = time.time()
+            historical_var()
+            print("Historical: --- %s seconds ---" % (time.time() - start_time))
             time.sleep(10)
         else:
             # Save last three years of data after market closes
