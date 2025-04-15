@@ -4,7 +4,7 @@ import datetime as dt
 import yfinance as yf
 from api.db import get_connection
 
-def get_portfolio_data(years: int):
+def get_portfolio_data(name: str, years: int, interval: str):
     """
     Fetches portfolio data from MySQL, saves it to CSV, and downloads historical stock prices.
 
@@ -39,12 +39,12 @@ def get_portfolio_data(years: int):
 
         # Download historical data for each ticker
         for ticker in tickers:
-            stock_data = yf.download(ticker, start=start_date, end=end_date)
+            stock_data = yf.download(ticker, start=start_date, end=end_date, interval=interval)
             if not stock_data.empty:
                 adj_close_df[ticker] = stock_data["Close"]
 
         # Save historical data to CSV
-        adj_close_df.to_csv("historical_data.csv", index=True)
+        adj_close_df.to_csv(f"{name}_{interval}_{years}years_data.csv", index=True)
 
     except Exception as e:
         print(f"Unexpected error: {e}")
@@ -94,9 +94,11 @@ def monte_carlo():
     """Run a Monte Carlo simulation for portfolio risk analysis."""
 
     start_time = dt.datetime.now()
+
+    start_data = dt.datetime.now()
     
     # Load historical price data
-    adj_close_df = pd.read_csv('historical_data.csv', index_col=0)
+    adj_close_df = pd.read_csv('historical_1d_3years_data.csv', index_col=0)
     tickers = list(adj_close_df.columns)
 
     print(f"Tickers: {tickers}")
@@ -105,6 +107,10 @@ def monte_carlo():
     current_prices = get_current_prices(tickers)
     current_prices_df = pd.DataFrame([current_prices], index=[dt.datetime.now()])
     adj_close_df = pd.concat([adj_close_df, current_prices_df])
+
+    end_data = dt.datetime.now()
+    duration = end_data - start_data
+    print(f"start: {start_data} end: {end_data} duration: {duration}")
 
     # Compute daily log returns
     log_returns = np.log(adj_close_df / adj_close_df.shift(1)).dropna()
@@ -137,7 +143,7 @@ def monte_carlo():
     portfolio_std_dev = standard_deviation(weights, cov_matrix)
 
     # Monte Carlo simulation
-    simulations = 20000
+    simulations = 100000
     days = 20
     scenario_returns = [
         scenario_gain_loss(market_value, portfolio_expected_return, portfolio_std_dev, random_z_score(), days)
@@ -153,8 +159,8 @@ def monte_carlo():
     ES = -np.mean(losses) if losses else 0
     end_time = dt.datetime.now()
 
-    print(f"Expected Shortfall (ES) at {confidence_interval * 100}% confidence: ${ES:,.2f}")
-    print(f"Value at Risk (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
+    print(f"MC (ES) at {confidence_interval * 100}% confidence: ${ES:,.2f}")
+    print(f"MC (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
     threshold = 0.0677
     percent_at_risk = VaR / market_value
@@ -248,14 +254,13 @@ def historical_var():
     start_time = dt.datetime.now()
     
     # Load data
-    adj_close_df = pd.read_csv('historical_data.csv', index_col=0)
+    adj_close_df = pd.read_csv('historical_1d_3years_data.csv', index_col=0)
     tickers = list(adj_close_df.columns)
     
     # Get current prices and update DataFrame
     current_prices = get_current_prices(tickers)
     current_prices_df = pd.DataFrame([current_prices], index=[dt.datetime.now()])
     adj_close_df = pd.concat([adj_close_df, current_prices_df])
-    adj_close_df.to_csv("historical_data.csv")
 
     # Calculate daily returns
     returns = adj_close_df.pct_change().dropna()
@@ -270,22 +275,27 @@ def historical_var():
     # Calculate historical portfolio returns
     portfolio_returns = returns.dot(weights)
 
+    days = 20
+
+    # Calculate 20-day rolling returns
+    portfolio_returns_window = portfolio_returns.rolling(window=days).sum().dropna()
+
     # Generate hypothetical P&L scenarios
-    scenarios = portfolio_value * portfolio_returns
+    scenarios = portfolio_value * portfolio_returns_window
 
     # Calculate VaR
-    confidence = 0.95
-    VaR = -np.percentile(scenarios, 100*(1-confidence))
+    confidence_interval = 0.95
+    VaR = -np.percentile(scenarios, 100*(1-confidence_interval))
 
     # Expected Shortfall (ES)
     losses = scenarios[scenarios < -VaR]
     ES = -np.mean(losses) if not losses.empty else 0
     end_time = dt.datetime.now()
 
-    print(f"Historical Expected Shortfall (ES) at {confidence * 100}% confidence: ${ES:,.2f}")
-    print(f"Historical VaR (95% CI): ${VaR:,.2f}")
+    print(f"Historical (ES) at {confidence_interval * 100}% confidence: ${ES:,.2f}")
+    print(f"Historical (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
-    threshold = 0.0149
+    threshold = 0.058
     percent_at_risk = VaR/portfolio_value
     warning = True if percent_at_risk >= threshold else False
     

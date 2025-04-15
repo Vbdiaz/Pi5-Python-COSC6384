@@ -1,6 +1,5 @@
 import multiprocessing
 from api import create_app
-import threading
 import time
 from datetime import datetime, timedelta
 
@@ -22,28 +21,29 @@ def is_market_open():
 
 def periodic_var_calculation():
     while True:
-        print("Starting periodic VaR calculation...")
         if is_market_open():
-            print("MARKET OPEN: Calculating VaR, sleeping for 10 seconds...")
+            start = time.time()
+            print(f"MARKET OPEN: Calculating VaR Time: {start}")
             start_time = time.time()
             monte_carlo()
             print("MonteCarlo: --- %s seconds ---" % (time.time() - start_time))
             start_time = time.time()
             historical_var()
             print("Historical: --- %s seconds ---" % (time.time() - start_time))
-            time.sleep(10)
+            time_to_next_minute = time.time() - start
+            time.sleep(max(0, 59 - time_to_next_minute))
         else:
             # Save last three years of data after market closes
             sleep_time = (get_next_open_time() - datetime.now()).total_seconds()
-            print(f"MARKET CLOSED: Sleeping until next open time for {sleep_time} seconds...")
             time.sleep(sleep_time)
+            print(f"MARKET CLOSED: Sleeping until next open time for {sleep_time} seconds...")
             
 
 app = create_app()
 
 if __name__ == "__main__":
     # Save last three years of data everytime we start again
-    get_portfolio_data(3)
+    get_portfolio_data("historical", 3, "1d")
     var_process = multiprocessing.Process(target=periodic_var_calculation)
     var_process.start()
     #periodic_var_calculation()
