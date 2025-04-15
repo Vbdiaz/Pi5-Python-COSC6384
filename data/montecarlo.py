@@ -255,6 +255,7 @@ def historical_var():
     current_prices = get_current_prices(tickers)
     current_prices_df = pd.DataFrame([current_prices], index=[dt.datetime.now()])
     adj_close_df = pd.concat([adj_close_df, current_prices_df])
+    adj_close_df.to_csv("historical_data.csv")
 
     # Calculate daily returns
     returns = adj_close_df.pct_change().dropna()
