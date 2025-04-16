@@ -151,7 +151,7 @@ def monte_carlo():
     ]
 
     # Compute Value at Risk (VaR) at 95% confidence interval
-    confidence_interval = 0.95
+    confidence_interval = 0.99
     VaR = -np.percentile(scenario_returns, 100 * (1 - confidence_interval))
 
     # Expected Shortfall (ES): mean of losses worse than the VaR
@@ -162,7 +162,7 @@ def monte_carlo():
     print(f"MC (ES) at {confidence_interval * 100}% confidence: ${ES:,.2f}")
     print(f"MC (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
-    threshold = 0.0677
+    threshold = 0.11
     percent_at_risk = VaR / market_value
     warning = True if percent_at_risk >= threshold else False
     push_value_at_risk_data(
@@ -284,7 +284,7 @@ def historical_var():
     scenarios = portfolio_value * portfolio_returns_window
 
     # Calculate VaR
-    confidence_interval = 0.95
+    confidence_interval = 0.99
     VaR = -np.percentile(scenarios, 100*(1-confidence_interval))
 
     # Expected Shortfall (ES)
@@ -295,7 +295,7 @@ def historical_var():
     print(f"Historical (ES) at {confidence_interval * 100}% confidence: ${ES:,.2f}")
     print(f"Historical (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
-    threshold = 0.058
+    threshold = 0.095
     percent_at_risk = VaR/portfolio_value
     warning = True if percent_at_risk >= threshold else False
     
