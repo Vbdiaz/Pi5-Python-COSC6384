@@ -295,7 +295,7 @@ def historical_var():
     print(f"Historical (ES) at {confidence_interval * 100}% confidence: ${ES:,.2f}")
     print(f"Historical (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
-    threshold = 0.095
+    threshold = 0.0918
     percent_at_risk = VaR/portfolio_value
     warning = True if percent_at_risk >= threshold else False
     

@@ -165,10 +165,10 @@ def analyze_historical():
                     ])
                     get_portfolio_data_api("new", 3, "1d", modified_portfolio)
                     # Calculate hypothetical VaR with temporary portfolio
-                    VaR, warning, threshold, market_value = monte_carlo_api(True, modified_portfolio)
+                    VaR, warning, threshold, market_value = historical_var_api(True, modified_portfolio)
 
                     results = {
-                        "monte_carlo": {
+                        "historical": {
                             "VaR": VaR,
                             "warning": warning,
                             "threshold": threshold,
@@ -186,10 +186,10 @@ def analyze_historical():
             temp_path = temp_file.name
 
         # Calculate hypothetical VaR with temporary portfolio
-        VaR, warning, threshold, market_value = monte_carlo_api(False, modified_portfolio)
+        VaR, warning, threshold, market_value = historical_var_api(False, modified_portfolio)
 
         results = {
-            "monte_carlo": {
+            "historical": {
                 "VaR": VaR,
                 "warning": warning,
                 "threshold": threshold,
@@ -455,7 +455,7 @@ def historical_var_api(new_ticker: bool, ticker_shares_df):
     print(f"Historical (ES) at {confidence_interval * 100}% confidence: ${ES:,.2f}")
     print(f"Historical (VaR) at {confidence_interval * 100}% confidence: ${VaR:,.2f}")
 
-    threshold = 0.095
+    threshold = 0.0918
     percent_at_risk = VaR/portfolio_value
     warning = True if percent_at_risk >= threshold else False
     
